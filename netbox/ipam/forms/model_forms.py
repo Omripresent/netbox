@@ -211,10 +211,8 @@ class PrefixForm(TenancyForm, NetBoxModelForm):
     vlan = DynamicModelChoiceField(
         queryset=VLAN.objects.all(),
         required=False,
+        selector=True,
         label=_('VLAN'),
-        query_params={
-            'site_id': '$site',
-        }
     )
     role = DynamicModelChoiceField(
         queryset=Role.objects.all(),
@@ -347,7 +345,7 @@ class IPAddressForm(TenancyForm, NetBoxModelForm):
             })
         elif selected_objects:
             assigned_object = self.cleaned_data[selected_objects[0]]
-            if self.cleaned_data['primary_for_parent'] and assigned_object != self.instance.assigned_object:
+            if self.instance.pk and self.cleaned_data['primary_for_parent'] and assigned_object != self.instance.assigned_object:
                 raise ValidationError(
                     "Cannot reassign IP address while it is designated as the primary IP for the parent object"
                 )
@@ -370,7 +368,7 @@ class IPAddressForm(TenancyForm, NetBoxModelForm):
                     raise ValidationError(msg)
                 if address.version == 6 and address.prefixlen not in (127, 128):
                     raise ValidationError(msg)
-            if address.ip == address.broadcast:
+            if address.version == 4 and address.ip == address.broadcast and address.prefixlen not in (31, 32):
                 msg = f"{address} is a broadcast address, which may not be assigned to an interface."
                 raise ValidationError(msg)
 
@@ -381,6 +379,7 @@ class IPAddressForm(TenancyForm, NetBoxModelForm):
         interface = self.instance.assigned_object
         if type(interface) in (Interface, VMInterface):
             parent = interface.parent_object
+            parent.snapshot()
             if self.cleaned_data['primary_for_parent']:
                 if ipaddress.address.version == 4:
                     parent.primary_ip4 = ipaddress
